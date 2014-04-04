@@ -1,6 +1,6 @@
 import os
 from tornado.web import Application as BaseApplication
-import fanoffers.app.controllers as c
+import controllers as c
 
 
 location = lambda x: os.path.join(os.path.dirname(__file__), x)

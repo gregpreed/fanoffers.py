@@ -1,5 +1,5 @@
 #FanOffers python backend
 
 ##Installation
-	git clone xxx
+	git clone git@github.com:gregpreed/fanoffers.py.git
 	mv fanoffers.py fanoffers
