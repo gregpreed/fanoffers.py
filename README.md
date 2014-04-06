@@ -1,6 +1,7 @@
 #FanOffers python backend
 
 ##Requirements
+  - oracle-java7-installer
   - neo4j
   - virtualenv
 
@@ -20,6 +21,9 @@
 	FACEBOOK_SECRET = {your secret}
 	TWITTER_API_KEY = {your api_key}
 	TWITTER_SECRET = {your secret}	
+	NEO4J_HOST = {eg http://localhost}
+	NEO4J_PORT = {eg 7474}
+	NEO4J_DB = {eg /db/data/}
 	
 Example generate cookie secret (python):
 
