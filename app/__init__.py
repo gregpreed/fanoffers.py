@@ -13,13 +13,15 @@ class Application(BaseApplication):
         handlers = (
             (r'/test', c.Test),
             (r'/auth/facebook', c.FacebookAuth),
+            (r'/auth/twitter', c.TwitterAuth),
+            (r'/process/facebook', c.FacebookProcess),
+            (r'/process/twitter', c.TwitterProcess),
         )
         db = '%s:%s%s' % (s.NEO4J_HOST, s.NEO4J_PORT, s.NEO4J_DB)
         self.db = GraphDatabase(db)
         settings = {'debug': s.DEBUG,
-                    'cookie_secret': s.COOKIE_SECRET,
                     'facebook_api_key': s.FACEBOOK_API_KEY,
                     'facebook_secret': s.FACEBOOK_SECRET,
-                    'twitter_api_key': s.TWITTER_API_KEY,
-                    'twitter_secret': s.TWITTER_SECRET}
+                    'twitter_consumer_key': s.TWITTER_CONSUMER_KEY,
+                    'twitter_consumer_secret': s.TWITTER_CONSUMER_SECRET}
         super(Application, self).__init__(handlers, **settings)

@@ -1,11 +1,9 @@
-import json
-from tornado.web import RequestHandler
 from tornado.gen import coroutine
-from tornado.auth import FacebookGraphMixin, _auth_return_future
-# from neo4jrestclient.query import Q
+from tornado.auth import FacebookGraphMixin, TwitterMixin, _auth_return_future
+from app.controllers import Controller
 
 
-class FacebookAuth(RequestHandler, FacebookGraphMixin):
+class FacebookAuth(Controller, FacebookGraphMixin):
     """
     Facebook authentication from access token. This class does not manage the
     obtention of the access token, needs to be provided as an argument.
@@ -62,7 +60,7 @@ class FacebookAuth(RequestHandler, FacebookGraphMixin):
                 'picture',
             )
             user = dict((k, v) for k, v in user.items() if k in fields)
-            self.json_write(json.dumps(user))
+            self.json_write(user)
         self.finish()
 
     @_auth_return_future
@@ -116,6 +114,21 @@ class FacebookAuth(RequestHandler, FacebookGraphMixin):
     #         db_like.labels.add('Like')
     #     return db_like
 
-    def json_write(self, chunk):
-        self.set_header('Content-Type', 'application/json')
-        self.write(chunk)
+
+class TwitterAuth(Controller, TwitterMixin):
+    """
+    Twitter authentication from access token. This class does not manage the
+    obtention of the access token, needs to be provided as an argument.
+    """
+
+    @coroutine
+    def get(self, *args, **kwargs):
+        print 'get', self.request.uri
+        access_token_splits = self.get_argument('access_token').split(',')
+        access_token = {'key': access_token_splits[0],
+                        'secret': access_token_splits[1]}
+        user = yield self.twitter_request(
+            '/account/verify_credentials',
+            access_token=access_token)
+        print user
+        self.json_write(user)

@@ -1,9 +1,10 @@
 #FanOffers python backend
 
 ##Requirements
-  - oracle-java7-installer
-  - neo4j
+  - openjdk==7
+  - neo4j==2.0.1
   - virtualenv
+  - redis
 
 ##Installation
 	$ git clone git@github.com:gregpreed/fanoffers.py.git
@@ -16,14 +17,15 @@
 ###settings.py
 
 	DEGUB = {True, False}
-	COOKIE_SECRET = {long random sequences of bits}
-	FACEBOOK_API_KEY = {your api key}
-	FACEBOOK_SECRET = {your secret}
-	TWITTER_API_KEY = {your api_key}
-	TWITTER_SECRET = {your secret}	
 	NEO4J_HOST = {eg http://localhost}
 	NEO4J_PORT = {eg 7474}
 	NEO4J_DB = {eg /db/data/}
+	FACEBOOK_API_KEY = {facebook_api_key}
+	FACEBOOK_SECRET = {facebook_secret}
+	TWITTER_CONSUMER_KEY = {twitter_consumer_key}
+	TWITTER_CONSUMER_SECRET = {twitter_comsumer_secret}
+	CELERY_BROKER_URL = {eg redis://localhost:6379}
+	CELERY_RESULT_BACKEND = {eg redis://localhost:6379/0}
 	
 Example generate cookie secret (python):
 
@@ -32,26 +34,48 @@ Example generate cookie secret (python):
 	print base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes)
 
 ##Endpoints
-###Auth
-####/auth/facebook
+###Process
+####/process/facebook
 
-	GET
+	POST
 	
 	{
-		access_token *,
-		expires
+		id,
+		friend_list,
+		like_list
 	}
 	
 	RESPONSE
 	
-	200
+	204
+	
+####/process/twitter
+
+	POST
+	
 	{
-		item: {
-			id,
-			name,
-			email,
-			image
-		}
+		id,
+		follower_list,
+		following_list
 	}
 	
-	400 - Code missed or invalid
+	RESPONSE
+	
+	204	
+	
+	
+##Neo4j
+###Naming conventions
+  - Labels: CamelCasedNames
+  - Relationships: underscored_names
+  - Property keys: underscored_names
+  
+###Labels
+  - User
+  - TwitterUser
+  - FacebookUser
+  
+###Relationships
+  - friend
+  - follows
+  - likes

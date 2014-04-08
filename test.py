@@ -4,15 +4,13 @@ import httplib
 import pprint
 
 HOST = 'localhost'
-PORT = 8888
-URL = '/auth/facebook'
-args = {
-    'access_token': 'CAACy91s5RDEBAJVKUP5xuABNp2BmlCSvwwPI1kWTMuZBfHov7PmB5BRyZBZCOufDR3Rcbndxlf9HZCzrWhLZBAEaXexzblCZC8zVxdUlZBQOIbrECpWR1KiaAnrH7ypeuiSqSyUfZCD2Q6jTpP8OX5ZA45WQvdBj5cEIVQRv8VUSKwXVrgEngyXuFf2JDC9FZC4j4ZD'
-}
+PORT = 8001
+URL = '/process/facebook'
 conn = httplib.HTTPConnection(HOST, PORT)
-url = '%s?%s' % (URL, urllib.urlencode(args))
-conn.request('GET', url)
+body = {'friend_list': [{'name': 'alice'}, {'name': 'bob'}],
+        'like_list': [{'id': '1', 'name': 'spice girls'}],}
+conn.request('POST', URL, json.dumps(body))
 response = conn.getresponse()
 print response.status
 print response.reason
-print pprint.pprint(json.loads(response.read()))
+# print pprint.pprint(json.loads(response.read()))
