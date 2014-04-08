@@ -33,6 +33,20 @@ Example generate cookie secret (python):
 	import uuid
 	print base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes)
 
+##Use
+###Neo4j database
+	$ sudo service neo4j start
+###Python REST server
+(Set up with a process monitor-control system in production - eg: supervisord)
+
+	$ venv/bin/python server.py --port={port_number}
+###Redis server
+	$ sudo service redis_{port} start
+###Celery task queue
+(Set up with a process monitor-control system in production - eg: supervisord)
+
+	$ venv/bin/celery -A app.controllers.process worker
+
 ##Endpoints
 ###Process
 ####/process/facebook
