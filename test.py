@@ -29,11 +29,15 @@ Kitty
 
 HOST = 'localhost'
 PORT = 8000
-URL = '/process/twitter'
-last_index = 21
-body = {'id': 1000,
-        'following_list': [{'id': i + last_index, 'name': x}
-                          for i, x in enumerate(names)]}
+URL = '/process/facebook'
+last_index = 3
+body = {'id': 1,
+        'friend_list': [{'id': i + last_index, 'name': x} for i, x in enumerate(names)]}
+        # 'like_list': [{'id': 1, 'name': 'like1'},
+        #               {'id': 2, 'name': 'like2'},
+        #               {'id': 3, 'name': 'like3'},
+        #               {'id': 4, 'name': 'like4'},
+        #               {'id': 5, 'name': 'like5'}]}
 
 conn = httplib.HTTPConnection(HOST, PORT)
 conn.request('POST', URL, json.dumps(body))

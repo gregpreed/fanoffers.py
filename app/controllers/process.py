@@ -1,105 +1,160 @@
 import json
 from celery import Celery, chain
 from tornado.web import RequestHandler
-from neo4jrestclient import client
-from app.settings import CELERY_BROKER_URL, CELERY_RESULT_BACKEND
-from app.utils import filter_dict, dict_to_neo4j_str
+from app.settings import CELERY_BROKER_URL
+import app.utils as u
+from app.neo4j_namespace import labels
 
 # debug__
 from time import time
 # __debug
 
+
 celery_app = Celery('tasks', broker=CELERY_BROKER_URL)
 
-TWITTER_FIELDS = ('id', 'name', 'followers_count', 'time_zone', 'utc_offset',)
-TWITTER_LABEL = 'TwitterUser'
+
+# Desired fields to filter.
+TWITTER_FIELDS = (
+    'id',
+    'name',
+    'followers_count',
+    'time_zone',
+    'utc_offset',)
+FACEBOOK_FIELDS = (
+    'id',
+    'gender',
+    'username',
+    'hometown',
+    'locale',
+    'location',)
+LIKE_FIELDS = (
+    'id',
+    'name',)
 
 
-def get_twitter_user_node(user_id, db):
-    """ Returns a neo4j node from a node_id. """
-    try:
-        return db.labels[TWITTER_LABEL].get(id=user_id)[0]
-    except:
-        return None
+def get_twitter_user_node(id_, db):
+    return u.get_node(id_, db, labels['twitter_user'])
 
 
-# def get_or_create_twitter_user_node(user_dict, db):
-#     """ Returns a neo4j node from a user dict from twitter api response. """
-#     user_dict = filter_dict(user_dict, TWITTER_FIELDS)
-#     user_node = get_twitter_user_node(user_dict['id'], db)
-#     if not user_node:
-#         q = 'create (n:{label} {properties}) return n'.format(
-#             label=TWITTER_LABEL, properties=dict_to_neo4j_str(user_dict))
-#         user_node = db.query(q, returns=(client.Node,))[0][0]
-#     return user_node
+def get_facebook_user_node(id_, db):
+    return u.get_node(id_, db, labels['facebook_user'])
+
+
+def get_facebook_like_node(id_, db):
+    return u.get_node(id_, db, labels['facebook_like'])
 
 
 @celery_app.task
-def process_facebook_friends(user_id, friend_list, db):
-    pass  # TODO create a chain of processes with friends' likes
-
-
-@celery_app.task
-def process_facebook_likes(user_id, like_list, db):
-    pass  # TODO same way twitter? use create unique?
-
-
-@celery_app.task
-def process_twitter_followers(user_id, follower_list, db):
-    print 'processing twitter followers'
-    user_node = get_twitter_user_node(user_id, db)
+def process_facebook_likes(id_, list_, db, is_node_id=False, *kwargs):
+    """
+    Parse and save facebook likes.
+    id_: facebook user id if is_node_id is equal to False, node id otherwise.
+    """
+    if not is_node_id:
+        id_ = get_facebook_user_node(id_, db).id
     with db.transaction(for_query=True) as _:
-        for i in follower_list:
-            i = filter_dict(i, TWITTER_FIELDS)
-            i_node = get_twitter_user_node(i['id'], db)
-            if i_node:
-                q = 'start x=node(%s), y=node(%s) create (x)<-[:%s]-(y)' % (
-                    user_node.id,
-                    i_node.id,
-                    'follows')
-            else:
-                q = 'start x=node(%s) create (x)<-[:%s]-(y:%s %s)' % (
-                    user_node.id,
-                    'follows',
-                    TWITTER_LABEL,
-                    dict_to_neo4j_str(i))
-            db.query(q)
-            print 'TwitterUser node created'
+        for i in list_:
+            i = u.filter_dict(i, LIKE_FIELDS)
+            db.query(u.get_relation_query(
+                node_0_id=id_,
+                node_1=get_facebook_like_node(i['id'], db),
+                label=labels['facebook_like'],
+                rel='likes',
+                properties=i))
 
 
 @celery_app.task
-def process_twitter_following(user_id, following_list, db):
+def process_facebook_friends(user_id, list_, db):
+    """
+    Parse and save facebook friends. Create a chain of processes for friends'
+    likes
+    """
+    print 'process_facebook_friends'
+    id_ = get_facebook_user_node(user_id, db).id
+    gender_nodes = u.get_gender_nodes(db)
+    likes_chain = []
+    with db.transaction(for_query=True) as _:
+        for i in list_:
+            try:
+                like_list = i.pop('likes')
+            except KeyError:
+                friend_node = None
+            else:
+                friend_node = get_facebook_user_node(i['id'], db)
+                if friend_node:
+                    likes_chain.append(process_facebook_likes.s(
+                        friend_node.id, like_list, db, True))
+                else:
+                    likes_chain.append(process_facebook_likes.s(
+                        i['id'], like_list, db))
+            i = u.filter_dict(i, FACEBOOK_FIELDS)
+
+            # Attribute nodes.
+            # Some attributes requires a creation of new nodes (eg. location).
+            # Some attributes assume the nodes already exists (eg. gender).
+            if 'locale' in i:
+                locale = i.pop('locale')
+                db.query(u.get_relation_query(
+                    node_0_id=id_,
+                    node_1=u.get_locale_node(locale, db),
+                    label=labels['locale'],
+                    rel='has_locale',
+                    properties={'name': locale}))
+            gender = i.get('gender')
+            if gender in gender_nodes.keys():
+                gender = i.pop('gender')
+                q = 'start x=node(%s),y=node(%s) create (x)-[:%s]->(y)' % (
+                    id_,
+                    gender_nodes[gender].id,
+                    'has_gender')
+                db.query(q)
+
+            # Facebook user node.
+            db.query(u.get_relation_query(
+                node_0_id=id_,
+                node_1=friend_node or get_facebook_user_node(i['id'], db),
+                label=labels['facebook_user'],
+                rel='friend_of',
+                properties=i))
+
+    if likes_chain:
+        chain(likes_chain).delay()
+
+
+@celery_app.task
+def process_twitter_followers(user_id, list_, db):
+    print 'processing twitter followers...'
+    id_ = get_twitter_user_node(user_id, db).id
+    with db.transaction(for_query=True) as _:
+        for i in list_:
+            i = u.filter_dict(i, TWITTER_FIELDS)
+            db.query(u.get_relation_query(
+                node_0_id=id_,
+                node_1=get_twitter_user_node(i['id'], db),
+                label=labels['twitter_user'],
+                rel='follows',
+                properties=i,
+                dir='rl'))
+
+
+@celery_app.task
+def process_twitter_following(user_id, list_, db):
     print 'processing twitter followings'
-    user_node = get_twitter_user_node(user_id, db)
+    id_ = get_twitter_user_node(user_id, db).id
     with db.transaction(for_query=True) as _:
-        for i in following_list:
-            i = filter_dict(i, TWITTER_FIELDS)
-            i_node = get_twitter_user_node(i['id'], db)
-            if i_node:
-                q = 'start x=node(%s), y=node(%s) create (x)-[:%s]->(y)' % (
-                    user_node.id,
-                    i_node.id,
-                    'follows')
-            else:
-                q = 'start x=node(%s) create (x)-[:%s]->(y:%s %s)' % (
-                    user_node.id,
-                    'follows',
-                    TWITTER_LABEL,
-                    dict_to_neo4j_str(i))
-            db.query(q)
-            print 'TwitterUser node created'
+        for i in list_:
+            i = u.filter_dict(i, TWITTER_FIELDS)
+            db.query(u.get_relation_query(
+                node_0_id=id_,
+                node_1=get_twitter_user_node(i['id'], db),
+                label=labels['twitter_user'],
+                rel='follows',
+                properties=i))
 
 
 class FacebookProcess(RequestHandler):
 
     def post(self):
-        # debug__
-        print 'POST'
-        print 'processing facebook...'
-        _time = time()
-        print '  t = 0'
-        # __debug
-
         body = json.loads(self.request.body)
         friend_list = body.get('friend_list', None)
         if friend_list:
@@ -109,12 +164,6 @@ class FacebookProcess(RequestHandler):
         if like_list:
             process_facebook_likes.delay(
                 body['id'], like_list, self.application.db)
-
-        # debug__
-        print '...done!'
-        print '  t =', time() - _time
-        # __debug
-
         self.set_status(204)
         self.finish()
 
@@ -122,13 +171,6 @@ class FacebookProcess(RequestHandler):
 class TwitterProcess(RequestHandler):
 
     def post(self):
-        # debug__
-        print 'POST'
-        print 'processing twitter...'
-        _time = time()
-        print '  t = 0'
-        # __debug
-
         body = json.loads(self.request.body)
         follower_list = body.get('follower_list', None)
         if follower_list:
@@ -138,11 +180,5 @@ class TwitterProcess(RequestHandler):
         if following_list:
             process_twitter_following.delay(
                 body['id'], following_list, self.application.db)
-
-        # debug__
-        print '...done!'
-        print '  t =', time() - _time
-        # __debug
-
         self.set_status(204)
         self.finish()
